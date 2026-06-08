@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="AI 题库" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>AI 发电产业题库</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./public/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./public/icon-192.png" />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="rail" aria-label="题库导航">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">AI</div>
+          <div>
+            <h1>AI 发电产业题库</h1>
+            <p>PDF 题库 · 1000 题</p>
+          </div>
+        </div>
+
+        <nav class="mode-list" aria-label="练习模式">
+          <button class="mode-button active" data-mode="sequence" type="button">
+            <span class="icon" aria-hidden="true">▶</span>
+            顺序练习
+          </button>
+          <button class="mode-button" data-mode="random" type="button">
+            <span class="icon" aria-hidden="true">↯</span>
+            随机练习
+          </button>
+          <button class="mode-button" data-mode="wrong" type="button">
+            <span class="icon" aria-hidden="true">!</span>
+            错题本
+          </button>
+          <button class="mode-button" data-mode="favorite" type="button">
+            <span class="icon" aria-hidden="true">★</span>
+            收藏
+          </button>
+        </nav>
+
+        <section class="filter-block" aria-labelledby="type-filter-title">
+          <div class="section-label" id="type-filter-title">题型筛选</div>
+          <label><input type="checkbox" value="single" checked /> 单选题</label>
+          <label><input type="checkbox" value="multiple" checked /> 多选题</label>
+          <label><input type="checkbox" value="judge" checked /> 判断题</label>
+          <label><input type="checkbox" value="essay" checked /> 论述题</label>
+        </section>
+
+        <section class="filter-block compact" aria-labelledby="jump-title">
+          <div class="section-label" id="jump-title">快速跳转</div>
+          <div class="jump-row">
+            <input id="jumpInput" inputmode="numeric" placeholder="题号" />
+            <button id="jumpButton" type="button" title="跳转到当前题型题号">跳转</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="search-wrap">
+            <span aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" placeholder="搜索题干、选项或答案" />
+          </div>
+          <div class="toolbar-actions">
+            <button id="resetProgressButton" class="ghost-button" type="button" title="清空本地答题记录">重置进度</button>
+            <button id="offlineStatus" class="status-pill" type="button" disabled>离线可用</button>
+          </div>
+        </header>
+
+        <section class="question-shell" aria-live="polite">
+          <div class="question-meta">
+            <span id="typeBadge">单选题</span>
+            <span id="positionText">第 1 / 1000 题</span>
+          </div>
+
+          <div class="question-head">
+            <h2 id="questionTitle"></h2>
+            <button id="favoriteButton" class="icon-button" type="button" title="收藏本题" aria-label="收藏本题">☆</button>
+          </div>
+
+          <div id="optionList" class="option-list"></div>
+
+          <div id="essayArea" class="essay-area hidden">
+            <textarea id="essayDraft" placeholder="这里可以写自己的作答要点，本地保存"></textarea>
+            <div class="essay-actions">
+              <button id="showEssayAnswer" class="secondary-button" type="button">查看参考答案</button>
+              <button id="markEssayWrong" class="ghost-button" type="button">标为需复习</button>
+            </div>
+          </div>
+
+          <div id="feedbackBox" class="feedback-box hidden"></div>
+
+          <div class="answer-panel">
+            <div>
+              <div class="section-label">答案 / 参考</div>
+              <p id="answerText">提交后显示答案</p>
+            </div>
+          </div>
+
+          <footer class="question-actions">
+            <button id="prevButton" class="secondary-button" type="button">上一题</button>
+            <button id="submitButton" class="primary-button" type="button">提交答案</button>
+            <button id="nextButton" class="secondary-button" type="button">下一题</button>
+          </footer>
+        </section>
+      </main>
+
+      <aside class="inspector" aria-label="学习进度">
+        <section>
+          <div class="section-label">今日进度</div>
+          <div class="progress-ring">
+            <div>
+              <strong id="accuracyText">0%</strong>
+              <span>正确率</span>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div><strong id="doneCount">0</strong><span>已练</span></div>
+            <div><strong id="wrongCount">0</strong><span>错题</span></div>
+            <div><strong id="favCount">0</strong><span>收藏</span></div>
+            <div><strong id="noteCount">0</strong><span>笔记</span></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-label">题库分布</div>
+          <div id="distribution" class="distribution"></div>
+        </section>
+
+        <section>
+          <div class="section-label">本题笔记</div>
+          <textarea id="noteInput" class="note-input" placeholder="写下易错点、关键词或背诵提示"></textarea>
+        </section>
+      </aside>
+    </div>
+
+    <script src="./src/questionBank.js"></script>
+    <script src="./src/app.js"></script>
+  </body>
+</html>

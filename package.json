@@ -1,0 +1,10 @@
+{
+  "name": "ai-power-question-bank",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI 发电产业技能大赛培训题库本地刷题网站",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "extract": "/Users/liwanjin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/extract_questions.py src/questionBank.json"
+  }
+}
