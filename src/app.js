@@ -46,11 +46,20 @@ init();
 
 function init() {
   questionBank = window.QUESTION_BANK || [];
+  applyDetailedExplanations();
   wireEvents();
   syncControlsFromState();
   renderDistribution();
   applyFilters();
   registerOfflineCache();
+}
+
+function applyDetailedExplanations() {
+  const explanationMap = window.QUESTION_EXPLANATIONS || {};
+  questionBank = questionBank.map((question) => ({
+    ...question,
+    detailedExplanation: explanationMap[question.id] || question.detailedExplanation,
+  }));
 }
 
 function loadState() {
@@ -463,6 +472,7 @@ function formatAnswer(question) {
 }
 
 function formatExplanation(question, submitted) {
+  if (question.detailedExplanation) return formatDetailedExplanation(question);
   if (question.explanation) return question.explanation;
   if (question.type === "essay") return "这类题建议先用自己的话列出要点，再对照参考答案补齐关键词、应用场景和风险措施。复习时重点看是否覆盖了题干要求的每个方面。";
   if (question.type === "judge") {
@@ -492,6 +502,31 @@ function formatExplanation(question, submitted) {
     lines.push("", `多选题容易漏选，本题还需要包含：${missed.map((option) => `${option.label}. ${option.text}`).join("；")}。`);
   }
   lines.push("", "记忆点：先记住题干问的是“正确项”还是“错误项/不包括”，再把标准选项里的核心词和题干关键词绑定起来。");
+  return lines.join("\n");
+}
+
+function formatDetailedExplanation(question) {
+  const detail = question.detailedExplanation;
+  const lines = [];
+
+  if (detail.analysis) {
+    lines.push("解析：", detail.analysis);
+  }
+
+  const optionLabels = question.options.map((option) => option.label);
+  const optionDetails = detail.options || {};
+  const availableLabels = optionLabels.filter((label) => optionDetails[label]);
+  if (availableLabels.length) {
+    lines.push("", "选项辨析：");
+    availableLabels.forEach((label) => {
+      lines.push(`${label}. ${optionDetails[label]}`);
+    });
+  }
+
+  if (detail.memory) {
+    lines.push("", "记忆点：", detail.memory);
+  }
+
   return lines.join("\n");
 }
 
