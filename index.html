@@ -73,10 +73,13 @@
           </div>
         </header>
 
-        <section class="question-shell" aria-live="polite">
+        <section id="questionShell" class="question-shell" aria-live="polite">
           <div class="question-meta">
-            <span id="typeBadge">单选题</span>
-            <span id="positionText">第 1 / 1000 题</span>
+            <div>
+              <span id="typeBadge">单选题</span>
+              <span id="positionText">第 1 / 1000 题</span>
+            </div>
+            <div class="question-progress" aria-hidden="true"><span></span></div>
           </div>
 
           <div class="question-head">
@@ -108,7 +111,7 @@
             <p id="explanationText"></p>
           </div>
 
-          <footer class="question-actions">
+          <footer class="question-actions" aria-label="答题操作">
             <button id="prevButton" class="secondary-button" type="button">上一题</button>
             <button id="submitButton" class="primary-button" type="button">提交答案</button>
             <button id="nextButton" class="secondary-button" type="button">下一题</button>
