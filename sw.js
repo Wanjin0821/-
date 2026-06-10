@@ -1,9 +1,10 @@
-const CACHE_NAME = "ai-power-quiz-v2";
+const CACHE_NAME = "ai-power-quiz-v3";
 const ASSETS = [
   "./",
   "./index.html",
   "./src/styles.css",
   "./src/app.js",
+  "./src/explanations.js",
   "./src/questionBank.js",
   "./src/questionBank.json",
 ];

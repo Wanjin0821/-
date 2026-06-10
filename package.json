@@ -5,6 +5,7 @@
   "description": "AI 发电产业技能大赛培训题库本地刷题网站",
   "scripts": {
     "start": "node scripts/serve.js",
-    "extract": "/Users/liwanjin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/extract_questions.py src/questionBank.json"
+    "extract": "/Users/liwanjin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/extract_questions.py src/questionBank.json",
+    "import:explanations": "/Users/liwanjin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/import_explanations.py"
   }
 }
