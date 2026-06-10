@@ -417,12 +417,25 @@ p {
   background: #fbfcfd;
 }
 
-.answer-panel p {
+.explanation-panel {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #bfded8;
+  border-radius: var(--radius);
+  background: #f2fbf9;
+}
+
+.answer-panel p,
+.explanation-panel p {
   white-space: pre-wrap;
   margin-top: 8px;
   color: #2d3b44;
   line-height: 1.65;
   font-size: 14px;
+}
+
+.explanation-panel p {
+  color: #19433f;
 }
 
 .question-actions {

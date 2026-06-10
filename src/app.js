@@ -27,6 +27,8 @@ const els = {
   markEssayWrong: $("#markEssayWrong"),
   feedbackBox: $("#feedbackBox"),
   answerText: $("#answerText"),
+  explanationPanel: $("#explanationPanel"),
+  explanationText: $("#explanationText"),
   prevButton: $("#prevButton"),
   submitButton: $("#submitButton"),
   nextButton: $("#nextButton"),
@@ -176,6 +178,7 @@ function applyFilters() {
       question.number,
       question.question,
       question.answer,
+      question.explanation || "",
       ...question.options.map((option) => `${option.label}.${option.text}`),
     ]
       .join(" ")
@@ -212,6 +215,8 @@ function renderQuestion() {
     els.essayArea.classList.add("hidden");
     els.feedbackBox.classList.add("hidden");
     els.answerText.textContent = "暂无";
+    els.explanationPanel.classList.add("hidden");
+    els.explanationText.textContent = "";
     els.noteInput.value = "";
     els.prevButton.disabled = true;
     els.nextButton.disabled = true;
@@ -250,6 +255,7 @@ function renderQuestion() {
 
   renderFeedback(question);
   els.answerText.textContent = answerVisible ? formatAnswer(question) : isEssay ? "可先写下自己的作答要点，再查看参考答案" : "提交后显示答案";
+  renderExplanation(question, submitted, answerVisible);
   els.prevButton.disabled = state.currentIndex <= 0;
   els.nextButton.disabled = state.currentIndex >= filteredQuestions.length - 1;
   els.submitButton.disabled = false;
@@ -339,6 +345,17 @@ function renderFeedback(question) {
   }
   els.feedbackBox.textContent = submitted.correct ? "回答正确" : `回答错误，正确答案是 ${answerLabelsFor(question).join("")}`;
   els.feedbackBox.className = `feedback-box ${submitted.correct ? "ok" : "bad"}`;
+}
+
+function renderExplanation(question, submitted, answerVisible) {
+  if (!answerVisible) {
+    els.explanationPanel.classList.add("hidden");
+    els.explanationText.textContent = "";
+    return;
+  }
+
+  els.explanationPanel.classList.remove("hidden");
+  els.explanationText.textContent = formatExplanation(question, submitted);
 }
 
 function flashFeedback(message, ok) {
@@ -443,6 +460,39 @@ function formatAnswer(question) {
     .map((option) => `${option.label}. ${option.text}`)
     .join("\n");
   return `${answerLabelsFor(question).join("")}\n${optionText}`;
+}
+
+function formatExplanation(question, submitted) {
+  if (question.explanation) return question.explanation;
+  if (question.type === "essay") return "这类题建议先用自己的话列出要点，再对照参考答案补齐关键词、应用场景和风险措施。复习时重点看是否覆盖了题干要求的每个方面。";
+  if (question.type === "judge") {
+    return `本题判断为“${question.answer}”。复习时先抓题干中的绝对化表述、适用范围和因果关系，再和标准答案核对，避免只凭印象判断。`;
+  }
+
+  const answerLabels = answerLabelsFor(question);
+  const correctOptions = question.options.filter((option) => answerLabels.includes(option.label));
+  const correctText = correctOptions.map((option) => `${option.label}. ${option.text}`).join("\n");
+  const selectedLabels = submitted?.selected || [];
+  const wrongSelected = question.options.filter(
+    (option) => selectedLabels.includes(option.label) && !answerLabels.includes(option.label)
+  );
+  const missed = correctOptions.filter((option) => !selectedLabels.includes(option.label));
+  const lines = [
+    `正确答案是 ${answerLabels.join("")}，关键依据是：`,
+    correctText,
+  ];
+
+  if (wrongSelected.length) {
+    lines.push(
+      "",
+      `你选择的 ${wrongSelected.map((option) => option.label).join("、")} 不在标准答案中，复盘时重点比较这些选项与正确选项的关键词差异。`
+    );
+  }
+  if (missed.length && question.type === "multiple") {
+    lines.push("", `多选题容易漏选，本题还需要包含：${missed.map((option) => `${option.label}. ${option.text}`).join("；")}。`);
+  }
+  lines.push("", "记忆点：先记住题干问的是“正确项”还是“错误项/不包括”，再把标准选项里的核心词和题干关键词绑定起来。");
+  return lines.join("\n");
 }
 
 function shuffle(items) {
