@@ -16,6 +16,7 @@ const els = {
   jumpInput: $("#jumpInput"),
   jumpButton: $("#jumpButton"),
   resetProgressButton: $("#resetProgressButton"),
+  questionShell: $("#questionShell"),
   typeBadge: $("#typeBadge"),
   positionText: $("#positionText"),
   questionTitle: $("#questionTitle"),
@@ -230,6 +231,8 @@ function renderQuestion() {
     els.prevButton.disabled = true;
     els.nextButton.disabled = true;
     els.submitButton.disabled = true;
+    els.questionShell.classList.remove("is-answered");
+    els.questionShell.style.setProperty("--question-progress", "0%");
     return;
   }
 
@@ -240,6 +243,8 @@ function renderQuestion() {
 
   els.typeBadge.textContent = `${question.typeName} ${question.number}`;
   els.positionText.textContent = `第 ${state.currentIndex + 1} / ${filteredQuestions.length} 题`;
+  els.questionShell.classList.toggle("is-answered", Boolean(answerVisible));
+  els.questionShell.style.setProperty("--question-progress", `${Math.max(1, Math.round(((state.currentIndex + 1) / filteredQuestions.length) * 100))}%`);
   els.questionTitle.textContent = question.question;
   els.favoriteButton.textContent = state.favorites[question.id] ? "★" : "☆";
   els.favoriteButton.classList.toggle("active", Boolean(state.favorites[question.id]));
@@ -248,7 +253,7 @@ function renderQuestion() {
 
   els.essayArea.classList.toggle("hidden", !isEssay);
   els.optionList.classList.toggle("hidden", isEssay);
-  els.submitButton.textContent = isEssay ? "完成本题" : "提交答案";
+  els.submitButton.textContent = submitted ? "已提交" : isEssay ? "完成本题" : "提交答案";
 
   if (isEssay) {
     els.essayDraft.value = state.essayDrafts[question.id] || "";
@@ -267,7 +272,7 @@ function renderQuestion() {
   renderExplanation(question, submitted, answerVisible);
   els.prevButton.disabled = state.currentIndex <= 0;
   els.nextButton.disabled = state.currentIndex >= filteredQuestions.length - 1;
-  els.submitButton.disabled = false;
+  els.submitButton.disabled = Boolean(submitted);
 }
 
 function optionTemplate(question, option, selected, submitted) {
@@ -315,6 +320,7 @@ function submitCurrent() {
     saveState();
     renderQuestion();
     renderStats();
+    focusReviewArea();
     return;
   }
 
@@ -337,6 +343,13 @@ function submitCurrent() {
   saveState();
   renderQuestion();
   renderStats();
+  focusReviewArea();
+}
+
+function focusReviewArea() {
+  window.requestAnimationFrame(() => {
+    els.feedbackBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
 }
 
 function renderFeedback(question) {
