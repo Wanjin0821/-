@@ -1,17 +1,34 @@
-const STORAGE_KEY = "ai-power-quiz-state-v1";
+const STORAGE_KEY = "zhilian-quiz-state-v2";
+const ALL_TYPES = ["single", "multiple", "judge", "essay"];
+const MODE_COPY = {
+  sequence: ["顺序练习", "稳稳向前，每题都算数", "按题库顺序稳步推进，适合系统复习。"],
+  learn: ["学习模式", "先看答案，再理解题目", "答案直接展示，适合第一次过题和快速回顾。"],
+  random: ["随机练习", "打乱顺序，保持新鲜", "题目随机出现，帮你摆脱顺序记忆。"],
+  speed: ["速刷模式", "快一点，手感正热", "确认后自动前进，适合碎片时间集中刷题。"],
+  exam: ["模拟考试", "专注作答，最后见分晓", "随机抽取 20 题，作答过程不显示对错。"],
+  wrong: ["错题重练", "再见一次，这次拿下", "只练曾经答错的题，答对后自动移出。"],
+  favorite: ["我的收藏", "重要的题，值得再看", "集中回顾你主动收藏的题目。"],
+};
 
 const state = loadState();
 let questionBank = [];
 let filteredQuestions = [];
 let randomOrder = [];
 let randomSignature = "";
+let speedTimer = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
-
 const els = {
+  sideNav: $(".side-nav"),
   modeButtons: $$(".mode-button"),
-  typeFilters: $$(".filter-block input[type='checkbox']"),
+  typeFilters: $$(".type-filters input"),
+  mobileMenuButton: $("#mobileMenuButton"),
+  modeEyebrow: $("#modeEyebrow"),
+  modeTitle: $("#modeTitle"),
+  modeHint: $("#modeHint"),
+  settingsButton: $("#settingsButton"),
+  settingsPanel: $("#settingsPanel"),
   searchInput: $("#searchInput"),
   jumpInput: $("#jumpInput"),
   jumpButton: $("#jumpButton"),
@@ -24,62 +41,50 @@ const els = {
   optionList: $("#optionList"),
   essayArea: $("#essayArea"),
   essayDraft: $("#essayDraft"),
-  showEssayAnswer: $("#showEssayAnswer"),
   markEssayWrong: $("#markEssayWrong"),
   feedbackBox: $("#feedbackBox"),
+  answerPanel: $("#answerPanel"),
   answerText: $("#answerText"),
-  explanationPanel: $("#explanationPanel"),
-  explanationText: $("#explanationText"),
   prevButton: $("#prevButton"),
   submitButton: $("#submitButton"),
   nextButton: $("#nextButton"),
-  accuracyText: $("#accuracyText"),
+  streakCount: $("#streakCount"),
   doneCount: $("#doneCount"),
+  accuracyText: $("#accuracyText"),
   wrongCount: $("#wrongCount"),
   favCount: $("#favCount"),
-  noteCount: $("#noteCount"),
-  noteInput: $("#noteInput"),
-  distribution: $("#distribution"),
-  offlineStatus: $("#offlineStatus"),
+  goalText: $("#goalText"),
+  goalProgress: $("#goalProgress"),
+  todayDate: $("#todayDate"),
 };
 
 init();
 
 function init() {
   questionBank = window.QUESTION_BANK || [];
-  applyDetailedExplanations();
   wireEvents();
-  syncControlsFromState();
-  renderDistribution();
+  syncControls();
   applyFilters();
+  els.todayDate.textContent = new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(new Date());
   registerOfflineCache();
-}
-
-function applyDetailedExplanations() {
-  const explanationMap = window.QUESTION_EXPLANATIONS || {};
-  questionBank = questionBank.map((question) => ({
-    ...question,
-    detailedExplanation: explanationMap[question.id] || question.detailedExplanation,
-  }));
 }
 
 function loadState() {
   const fallback = {
     mode: "sequence",
-    activeTypes: ["single", "multiple", "judge", "essay"],
+    activeTypes: [...ALL_TYPES],
     search: "",
     currentIndex: 0,
     selected: {},
     submitted: {},
     wrong: {},
     favorites: {},
-    notes: {},
     essayDrafts: {},
-    revealedEssayAnswers: {},
+    streak: 0,
   };
-
   try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    return { ...fallback, ...saved, activeTypes: saved.activeTypes || fallback.activeTypes };
   } catch {
     return fallback;
   }
@@ -90,90 +95,69 @@ function saveState() {
 }
 
 function wireEvents() {
-  els.modeButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      state.mode = button.dataset.mode;
-      state.currentIndex = 0;
-      randomOrder = [];
-      syncControlsFromState();
-      applyFilters();
-      saveState();
-    });
-  });
-
-  els.typeFilters.forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      state.activeTypes = els.typeFilters.filter((item) => item.checked).map((item) => item.value);
-      state.currentIndex = 0;
-      randomOrder = [];
-      applyFilters();
-      saveState();
-    });
-  });
-
+  els.modeButtons.forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
+  els.typeFilters.forEach((checkbox) => checkbox.addEventListener("change", () => {
+    state.activeTypes = els.typeFilters.filter((item) => item.checked).map((item) => item.value);
+    if (!state.activeTypes.length) {
+      checkbox.checked = true;
+      state.activeTypes = [checkbox.value];
+    }
+    state.currentIndex = 0;
+    resetOrder();
+    applyFilters();
+    saveState();
+  }));
   els.searchInput.addEventListener("input", () => {
     state.search = els.searchInput.value.trim();
     state.currentIndex = 0;
-    randomOrder = [];
+    resetOrder();
     applyFilters();
     saveState();
   });
-
+  els.settingsButton.addEventListener("click", () => els.settingsPanel.classList.toggle("hidden"));
+  els.mobileMenuButton.addEventListener("click", () => els.sideNav.classList.toggle("open"));
   els.jumpButton.addEventListener("click", jumpToNumber);
-  els.jumpInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") jumpToNumber();
-  });
-
+  els.jumpInput.addEventListener("keydown", (event) => event.key === "Enter" && jumpToNumber());
   els.prevButton.addEventListener("click", () => moveQuestion(-1));
   els.nextButton.addEventListener("click", () => moveQuestion(1));
   els.submitButton.addEventListener("click", submitCurrent);
   els.favoriteButton.addEventListener("click", toggleFavorite);
-  els.showEssayAnswer.addEventListener("click", revealEssayAnswer);
   els.markEssayWrong.addEventListener("click", markEssayForReview);
-
-  els.noteInput.addEventListener("input", () => {
-    const current = currentQuestion();
-    if (!current) return;
-    state.notes[current.id] = els.noteInput.value;
-    if (!els.noteInput.value.trim()) delete state.notes[current.id];
-    saveState();
-    renderStats();
-  });
-
   els.essayDraft.addEventListener("input", () => {
-    const current = currentQuestion();
-    if (!current) return;
-    state.essayDrafts[current.id] = els.essayDraft.value;
-    if (!els.essayDraft.value.trim()) delete state.essayDrafts[current.id];
+    const question = currentQuestion();
+    if (!question) return;
+    state.essayDrafts[question.id] = els.essayDraft.value;
     saveState();
   });
-
-  els.resetProgressButton.addEventListener("click", () => {
-    const confirmed = window.confirm("确定清空答题记录、错题、收藏和笔记吗？");
-    if (!confirmed) return;
-    Object.assign(state, {
-      selected: {},
-      submitted: {},
-      wrong: {},
-      favorites: {},
-      notes: {},
-      essayDrafts: {},
-      revealedEssayAnswers: {},
-      currentIndex: 0,
-    });
-    saveState();
-    applyFilters();
-  });
+  els.resetProgressButton.addEventListener("click", resetProgress);
+  document.addEventListener("keydown", handleKeyboard);
 }
 
-function syncControlsFromState() {
-  els.modeButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.mode === state.mode);
-  });
-  els.typeFilters.forEach((checkbox) => {
-    checkbox.checked = state.activeTypes.includes(checkbox.value);
-  });
+function setMode(mode) {
+  window.clearTimeout(speedTimer);
+  state.mode = mode;
+  state.currentIndex = 0;
+  resetOrder();
+  syncControls();
+  applyFilters();
+  saveState();
+  els.sideNav.classList.remove("open");
+}
+
+function resetOrder() {
+  randomOrder = [];
+  randomSignature = "";
+}
+
+function syncControls() {
+  els.modeButtons.forEach((button) => button.classList.toggle("active", button.dataset.mode === state.mode));
+  els.typeFilters.forEach((checkbox) => { checkbox.checked = state.activeTypes.includes(checkbox.value); });
   els.searchInput.value = state.search;
+  const [eyebrow, title, hint] = MODE_COPY[state.mode] || MODE_COPY.sequence;
+  els.modeEyebrow.textContent = eyebrow;
+  els.modeTitle.textContent = title;
+  els.modeHint.textContent = hint;
+  document.body.dataset.mode = state.mode;
 }
 
 function applyFilters() {
@@ -183,127 +167,103 @@ function applyFilters() {
     if (state.mode === "wrong" && !state.wrong[question.id]) return false;
     if (state.mode === "favorite" && !state.favorites[question.id]) return false;
     if (!query) return true;
-    const haystack = [
-      question.typeName,
-      question.number,
-      question.question,
-      question.answer,
-      question.explanation || "",
-      ...question.options.map((option) => `${option.label}.${option.text}`),
-    ]
-      .join(" ")
-      .toLowerCase();
-    return haystack.includes(query);
+    return [question.typeName, question.number, question.question, question.answer, ...question.options.map((option) => option.text)]
+      .join(" ").toLowerCase().includes(query);
   });
 
-  if (state.mode === "random") {
-    const signature = filteredQuestions.map((question) => question.id).join("|");
-    if (signature !== randomSignature || randomOrder.length !== filteredQuestions.length) {
+  const shuffledMode = ["random", "speed", "exam"].includes(state.mode);
+  if (shuffledMode) {
+    const signature = `${state.mode}:${filteredQuestions.map((question) => question.id).join("|")}`;
+    if (signature !== randomSignature) {
       randomSignature = signature;
       randomOrder = shuffle(filteredQuestions.map((_, index) => index));
     }
+    if (state.mode === "exam") randomOrder = randomOrder.slice(0, 20);
   }
-
-  state.currentIndex = clamp(state.currentIndex, 0, Math.max(filteredQuestions.length - 1, 0));
+  state.currentIndex = clamp(state.currentIndex, 0, Math.max(visibleLength() - 1, 0));
   renderQuestion();
   renderStats();
 }
 
+function visibleLength() {
+  return ["random", "speed", "exam"].includes(state.mode) ? randomOrder.length : filteredQuestions.length;
+}
+
 function currentQuestion() {
   if (!filteredQuestions.length) return null;
-  const index = state.mode === "random" ? randomOrder[state.currentIndex] : state.currentIndex;
-  return filteredQuestions[index] || filteredQuestions[0];
+  const index = ["random", "speed", "exam"].includes(state.mode) ? randomOrder[state.currentIndex] : state.currentIndex;
+  return filteredQuestions[index];
 }
 
 function renderQuestion() {
+  window.clearTimeout(speedTimer);
   const question = currentQuestion();
-  if (!question) {
-    els.typeBadge.textContent = "无题目";
-    els.positionText.textContent = "0 / 0";
-    els.questionTitle.textContent = "当前筛选条件下没有题目";
-    els.optionList.innerHTML = `<div class="empty-state"><strong>没有匹配题目</strong><span>换一个模式、题型或搜索词试试</span></div>`;
-    els.essayArea.classList.add("hidden");
-    els.feedbackBox.classList.add("hidden");
-    els.answerText.textContent = "暂无";
-    els.explanationPanel.classList.add("hidden");
-    els.explanationText.textContent = "";
-    els.noteInput.value = "";
-    els.prevButton.disabled = true;
-    els.nextButton.disabled = true;
-    els.submitButton.disabled = true;
-    els.questionShell.classList.remove("is-answered");
-    els.questionShell.style.setProperty("--question-progress", "0%");
-    return;
-  }
+  const total = visibleLength();
+  if (!question) return renderEmpty();
 
   const submitted = state.submitted[question.id];
   const selected = state.selected[question.id] || [];
   const isEssay = question.type === "essay";
-  const answerVisible = submitted || state.revealedEssayAnswers[question.id];
+  const isLearning = state.mode === "learn";
+  const isExam = state.mode === "exam";
+  const answerVisible = isLearning || (Boolean(submitted) && !isExam);
 
-  els.typeBadge.textContent = `${question.typeName} ${question.number}`;
-  els.positionText.textContent = `第 ${state.currentIndex + 1} / ${filteredQuestions.length} 题`;
-  els.questionShell.classList.toggle("is-answered", Boolean(answerVisible));
-  els.questionShell.style.setProperty("--question-progress", `${Math.max(1, Math.round(((state.currentIndex + 1) / filteredQuestions.length) * 100))}%`);
+  els.typeBadge.textContent = question.typeName;
+  els.positionText.textContent = `${state.currentIndex + 1} / ${total}`;
+  els.questionShell.style.setProperty("--question-progress", `${Math.max(2, Math.round(((state.currentIndex + 1) / total) * 100))}%`);
+  els.questionShell.classList.toggle("learning", isLearning);
   els.questionTitle.textContent = question.question;
   els.favoriteButton.textContent = state.favorites[question.id] ? "★" : "☆";
   els.favoriteButton.classList.toggle("active", Boolean(state.favorites[question.id]));
   els.favoriteButton.setAttribute("aria-pressed", String(Boolean(state.favorites[question.id])));
-  els.noteInput.value = state.notes[question.id] || "";
-
   els.essayArea.classList.toggle("hidden", !isEssay);
   els.optionList.classList.toggle("hidden", isEssay);
-  els.submitButton.textContent = submitted ? "已提交" : isEssay ? "完成本题" : "提交答案";
+  els.essayDraft.value = state.essayDrafts[question.id] || "";
 
-  if (isEssay) {
-    els.essayDraft.value = state.essayDrafts[question.id] || "";
-    els.optionList.innerHTML = "";
-  } else {
-    els.optionList.innerHTML = question.options
-      .map((option) => optionTemplate(question, option, selected, submitted))
-      .join("");
-    $$(".option-row").forEach((row) => {
-      row.addEventListener("click", () => toggleOption(question, row.dataset.option));
-    });
+  if (!isEssay) {
+    els.optionList.innerHTML = question.options.map((option) => optionTemplate(question, option, selected, submitted, answerVisible, isExam)).join("");
+    $$(".option-row").forEach((row) => row.addEventListener("click", () => toggleOption(question, row.dataset.option)));
   }
 
-  renderFeedback(question);
-  els.answerText.textContent = answerVisible ? formatAnswer(question) : isEssay ? "可先写下自己的作答要点，再查看参考答案" : "提交后显示答案";
-  renderExplanation(question, submitted, answerVisible);
+  renderFeedback(question, submitted, isLearning, isExam);
+  els.answerPanel.classList.toggle("hidden", !answerVisible);
+  els.answerText.textContent = answerVisible ? formatAnswer(question) : "";
   els.prevButton.disabled = state.currentIndex <= 0;
-  els.nextButton.disabled = state.currentIndex >= filteredQuestions.length - 1;
+  els.nextButton.disabled = state.currentIndex >= total - 1;
+  els.submitButton.classList.toggle("hidden", isLearning);
   els.submitButton.disabled = Boolean(submitted);
+  els.submitButton.textContent = submitted ? (isExam ? "已记录" : "已完成") : isEssay ? "完成本题" : "确认答案";
 }
 
-function optionTemplate(question, option, selected, submitted) {
-  const isSelected = selected.includes(option.label);
-  const answerLabels = answerLabelsFor(question);
-  const isCorrectOption = submitted && answerLabels.includes(option.label);
-  const isWrongOption = submitted && isSelected && !answerLabels.includes(option.label);
-  const classes = ["option-row"];
-  if (isSelected) classes.push("selected");
-  if (isCorrectOption) classes.push("correct");
-  if (isWrongOption) classes.push("wrong");
+function renderEmpty() {
+  els.typeBadge.textContent = "空空如也";
+  els.positionText.textContent = "0 / 0";
+  els.questionTitle.textContent = state.mode === "wrong" ? "太棒了，暂时没有错题" : state.mode === "favorite" ? "还没有收藏题目" : "没有匹配到题目";
+  els.optionList.innerHTML = `<div class="empty-state"><span>✓</span><strong>换个模式或筛选条件试试</strong></div>`;
+  els.essayArea.classList.add("hidden");
+  els.feedbackBox.classList.add("hidden");
+  els.answerPanel.classList.add("hidden");
+  els.prevButton.disabled = true;
+  els.nextButton.disabled = true;
+  els.submitButton.disabled = true;
+  els.questionShell.style.setProperty("--question-progress", "0%");
+}
 
-  return `
-    <button class="${classes.join(" ")}" type="button" data-option="${escapeHtml(option.label)}">
-      <span class="option-label">${escapeHtml(option.label)}</span>
-      <span class="option-text">${escapeHtml(option.text)}</span>
-    </button>
-  `;
+function optionTemplate(question, option, selected, submitted, answerVisible, isExam) {
+  const selectedNow = selected.includes(option.label);
+  const correct = answerVisible && answerLabelsFor(question).includes(option.label);
+  const wrong = answerVisible && submitted && selectedNow && !correct;
+  const classes = ["option-row", selectedNow ? "selected" : "", correct ? "correct" : "", wrong ? "wrong" : ""].filter(Boolean);
+  return `<button class="${classes.join(" ")}" type="button" data-option="${escapeHtml(option.label)}" ${submitted && !isExam ? "disabled" : ""}>
+    <span class="option-label">${escapeHtml(option.label)}</span><span class="option-text">${escapeHtml(option.text)}</span><span class="option-state">${correct ? "✓" : wrong ? "×" : ""}</span>
+  </button>`;
 }
 
 function toggleOption(question, label) {
   if (state.submitted[question.id]) return;
   const selected = new Set(state.selected[question.id] || []);
-
-  if (question.type === "multiple") {
-    selected.has(label) ? selected.delete(label) : selected.add(label);
-  } else {
-    selected.clear();
-    selected.add(label);
-  }
-
+  if (question.type === "multiple") selected.has(label) ? selected.delete(label) : selected.add(label);
+  else { selected.clear(); selected.add(label); }
   state.selected[question.id] = Array.from(selected).sort();
   saveState();
   renderQuestion();
@@ -311,271 +271,149 @@ function toggleOption(question, label) {
 
 function submitCurrent() {
   const question = currentQuestion();
-  if (!question) return;
-
+  if (!question || state.submitted[question.id]) return;
   if (question.type === "essay") {
     state.submitted[question.id] = { selected: ["已完成"], correct: true, at: Date.now() };
-    state.revealedEssayAnswers[question.id] = true;
-    delete state.wrong[question.id];
-    saveState();
-    renderQuestion();
-    renderStats();
-    focusReviewArea();
-    return;
-  }
-
-  const selected = state.selected[question.id] || [];
-  if (!selected.length) {
-    flashFeedback("请选择一个答案再提交", false);
-    return;
-  }
-
-  const selectedKey = selected.join("");
-  const correctKey = answerLabelsFor(question).join("");
-  const correct = selectedKey === correctKey;
-
-  state.submitted[question.id] = { selected, correct, at: Date.now() };
-  if (correct) {
-    delete state.wrong[question.id];
+    state.streak += 1;
   } else {
-    state.wrong[question.id] = true;
+    const selected = state.selected[question.id] || [];
+    if (!selected.length) return flashFeedback("先选一个答案吧", false);
+    const correct = selected.join("") === answerLabelsFor(question).join("");
+    state.submitted[question.id] = { selected, correct, at: Date.now() };
+    if (correct) { delete state.wrong[question.id]; state.streak += 1; }
+    else { state.wrong[question.id] = true; state.streak = 0; }
   }
   saveState();
   renderQuestion();
   renderStats();
-  focusReviewArea();
+  if (state.mode === "speed" && state.currentIndex < visibleLength() - 1) speedTimer = window.setTimeout(() => moveQuestion(1), 720);
 }
 
-function focusReviewArea() {
-  window.requestAnimationFrame(() => {
-    els.feedbackBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  });
-}
-
-function renderFeedback(question) {
-  const submitted = state.submitted[question.id];
-  if (!submitted) {
-    els.feedbackBox.classList.add("hidden");
-    els.feedbackBox.classList.remove("ok", "bad");
-    els.feedbackBox.textContent = "";
-    return;
-  }
-  if (question.type === "essay") {
-    els.feedbackBox.textContent = "已完成本题，可对照参考答案复盘。";
+function renderFeedback(question, submitted, isLearning, isExam) {
+  if (isLearning) {
+    els.feedbackBox.textContent = "学习模式 · 答案已直接标出";
+    els.feedbackBox.className = "feedback-box learn";
+  } else if (!submitted) {
+    els.feedbackBox.className = "feedback-box hidden";
+  } else if (isExam) {
+    els.feedbackBox.textContent = "答案已记录，继续下一题";
+    els.feedbackBox.className = "feedback-box neutral";
+  } else if (question.type === "essay" || submitted.correct) {
+    els.feedbackBox.textContent = question.type === "essay" ? "本题已完成" : "漂亮，答对了！";
     els.feedbackBox.className = "feedback-box ok";
-    return;
+  } else {
+    els.feedbackBox.textContent = `再想一步，正确答案是 ${answerLabelsFor(question).join("")}`;
+    els.feedbackBox.className = "feedback-box bad";
   }
-  els.feedbackBox.textContent = submitted.correct ? "回答正确" : `回答错误，正确答案是 ${answerLabelsFor(question).join("")}`;
-  els.feedbackBox.className = `feedback-box ${submitted.correct ? "ok" : "bad"}`;
-}
-
-function renderExplanation(question, submitted, answerVisible) {
-  if (!answerVisible) {
-    els.explanationPanel.classList.add("hidden");
-    els.explanationText.textContent = "";
-    return;
-  }
-
-  els.explanationPanel.classList.remove("hidden");
-  els.explanationText.textContent = formatExplanation(question, submitted);
 }
 
 function flashFeedback(message, ok) {
   els.feedbackBox.textContent = message;
   els.feedbackBox.className = `feedback-box ${ok ? "ok" : "bad"}`;
-  window.setTimeout(() => renderFeedback(currentQuestion()), 1600);
+  window.setTimeout(() => renderFeedback(currentQuestion(), state.submitted[currentQuestion()?.id], state.mode === "learn", state.mode === "exam"), 1400);
 }
 
-function revealEssayAnswer() {
-  const question = currentQuestion();
-  if (!question) return;
-  state.revealedEssayAnswers[question.id] = true;
+function moveQuestion(delta) {
+  const next = state.currentIndex + delta;
+  if (next < 0 || next >= visibleLength()) return;
+  state.currentIndex = next;
   saveState();
   renderQuestion();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function jumpToNumber() {
+  const target = Number.parseInt(els.jumpInput.value, 10);
+  if (!Number.isFinite(target)) return;
+  const sourceIndex = filteredQuestions.findIndex((question) => question.number === target);
+  const index = ["random", "speed", "exam"].includes(state.mode) ? randomOrder.indexOf(sourceIndex) : sourceIndex;
+  if (index < 0) return flashFeedback("当前范围里没有这个题号", false);
+  state.currentIndex = index;
+  saveState();
+  renderQuestion();
+  els.settingsPanel.classList.add("hidden");
+}
+
+function toggleFavorite() {
+  const question = currentQuestion();
+  if (!question) return;
+  if (state.favorites[question.id]) delete state.favorites[question.id];
+  else state.favorites[question.id] = true;
+  saveState();
+  if (state.mode === "favorite") applyFilters();
+  else { renderQuestion(); renderStats(); }
 }
 
 function markEssayForReview() {
   const question = currentQuestion();
   if (!question) return;
   state.wrong[question.id] = true;
-  state.revealedEssayAnswers[question.id] = true;
   saveState();
-  renderQuestion();
   renderStats();
+  flashFeedback("已加入错题重练", true);
 }
 
-function toggleFavorite() {
+function resetProgress() {
+  if (!window.confirm("确定清空答题、错题和收藏记录吗？")) return;
+  Object.assign(state, { currentIndex: 0, selected: {}, submitted: {}, wrong: {}, favorites: {}, essayDrafts: {}, streak: 0 });
+  saveState();
+  applyFilters();
+  els.settingsPanel.classList.add("hidden");
+}
+
+function handleKeyboard(event) {
+  if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
   const question = currentQuestion();
   if (!question) return;
-  if (state.favorites[question.id]) {
-    delete state.favorites[question.id];
-  } else {
-    state.favorites[question.id] = true;
+  if (/^[1-4]$/.test(event.key) && question.type !== "essay") {
+    const option = question.options[Number(event.key) - 1];
+    if (option) toggleOption(question, option.label);
   }
-  saveState();
-  if (state.mode === "favorite") applyFilters();
-  renderQuestion();
-  renderStats();
-}
-
-function moveQuestion(delta) {
-  state.currentIndex = clamp(state.currentIndex + delta, 0, Math.max(filteredQuestions.length - 1, 0));
-  saveState();
-  renderQuestion();
-}
-
-function jumpToNumber() {
-  const target = Number.parseInt(els.jumpInput.value, 10);
-  if (!Number.isFinite(target)) return;
-  const index = filteredQuestions.findIndex((question) => question.number === target);
-  if (index >= 0) {
-    state.currentIndex = state.mode === "random" ? randomOrder.indexOf(index) : index;
-    saveState();
-    renderQuestion();
-  } else {
-    flashFeedback("当前筛选条件下没有这个题号", false);
-  }
+  if (event.key === "Enter") submitCurrent();
+  if (event.key === "ArrowLeft") moveQuestion(-1);
+  if (event.key === "ArrowRight") moveQuestion(1);
 }
 
 function renderStats() {
-  const submitted = Object.values(state.submitted);
-  const objectiveSubmitted = submitted.filter((item) => typeof item.correct === "boolean");
-  const correct = objectiveSubmitted.filter((item) => item.correct).length;
-  const accuracy = objectiveSubmitted.length ? Math.round((correct / objectiveSubmitted.length) * 100) : 0;
-
+  const submissions = Object.values(state.submitted);
+  const objective = submissions.filter((item) => typeof item.correct === "boolean");
+  const correct = objective.filter((item) => item.correct).length;
+  const accuracy = objective.length ? Math.round((correct / objective.length) * 100) : 0;
+  els.doneCount.innerHTML = `${submissions.length} <small>题</small>`;
   els.accuracyText.textContent = `${accuracy}%`;
-  els.doneCount.textContent = String(submitted.length);
-  els.wrongCount.textContent = String(Object.keys(state.wrong).length);
-  els.favCount.textContent = String(Object.keys(state.favorites).length);
-  els.noteCount.textContent = String(Object.keys(state.notes).length);
-}
-
-function renderDistribution() {
-  const counts = questionBank.reduce((acc, question) => {
-    acc[question.typeName] = (acc[question.typeName] || 0) + 1;
-    return acc;
-  }, {});
-  const total = questionBank.length || 1;
-  els.distribution.innerHTML = Object.entries(counts)
-    .map(([label, count]) => {
-      const percent = Math.round((count / total) * 100);
-      return `
-        <div class="dist-row">
-          <header><span>${escapeHtml(label)}</span><span>${count}</span></header>
-          <div class="dist-bar"><span style="width: ${percent}%"></span></div>
-        </div>
-      `;
-    })
-    .join("");
+  els.wrongCount.textContent = Object.keys(state.wrong).length;
+  els.favCount.textContent = Object.keys(state.favorites).length;
+  els.streakCount.textContent = state.streak || 0;
+  els.goalText.textContent = `${Math.min(submissions.length, 30)} / 30`;
+  els.goalProgress.style.width = `${Math.min(100, (submissions.length / 30) * 100)}%`;
 }
 
 function answerLabelsFor(question) {
-  if (question.type === "judge") return [question.answer];
+  if (question.type === "judge") return [String(question.answer)];
   return String(question.answer || "").split("").sort();
 }
 
 function formatAnswer(question) {
   if (question.type === "essay") return question.answer;
-  if (question.type === "judge") return question.answer;
-  const optionText = question.options
-    .filter((option) => answerLabelsFor(question).includes(option.label))
-    .map((option) => `${option.label}. ${option.text}`)
-    .join("\n");
-  return `${answerLabelsFor(question).join("")}\n${optionText}`;
-}
-
-function formatExplanation(question, submitted) {
-  if (question.detailedExplanation) return formatDetailedExplanation(question);
-  if (question.explanation) return question.explanation;
-  if (question.type === "essay") return "这类题建议先用自己的话列出要点，再对照参考答案补齐关键词、应用场景和风险措施。复习时重点看是否覆盖了题干要求的每个方面。";
-  if (question.type === "judge") {
-    return `本题判断为“${question.answer}”。复习时先抓题干中的绝对化表述、适用范围和因果关系，再和标准答案核对，避免只凭印象判断。`;
-  }
-
-  const answerLabels = answerLabelsFor(question);
-  const correctOptions = question.options.filter((option) => answerLabels.includes(option.label));
-  const correctText = correctOptions.map((option) => `${option.label}. ${option.text}`).join("\n");
-  const selectedLabels = submitted?.selected || [];
-  const wrongSelected = question.options.filter(
-    (option) => selectedLabels.includes(option.label) && !answerLabels.includes(option.label)
-  );
-  const missed = correctOptions.filter((option) => !selectedLabels.includes(option.label));
-  const lines = [
-    `正确答案是 ${answerLabels.join("")}，关键依据是：`,
-    correctText,
-  ];
-
-  if (wrongSelected.length) {
-    lines.push(
-      "",
-      `你选择的 ${wrongSelected.map((option) => option.label).join("、")} 不在标准答案中，复盘时重点比较这些选项与正确选项的关键词差异。`
-    );
-  }
-  if (missed.length && question.type === "multiple") {
-    lines.push("", `多选题容易漏选，本题还需要包含：${missed.map((option) => `${option.label}. ${option.text}`).join("；")}。`);
-  }
-  lines.push("", "记忆点：先记住题干问的是“正确项”还是“错误项/不包括”，再把标准选项里的核心词和题干关键词绑定起来。");
-  return lines.join("\n");
-}
-
-function formatDetailedExplanation(question) {
-  const detail = question.detailedExplanation;
-  const lines = [];
-
-  if (detail.analysis) {
-    lines.push("解析：", detail.analysis);
-  }
-
-  const optionLabels = question.options.map((option) => option.label);
-  const optionDetails = detail.options || {};
-  const availableLabels = optionLabels.filter((label) => optionDetails[label]);
-  if (availableLabels.length) {
-    lines.push("", "选项辨析：");
-    availableLabels.forEach((label) => {
-      lines.push(`${label}. ${optionDetails[label]}`);
-    });
-  }
-
-  if (detail.memory) {
-    lines.push("", "记忆点：", detail.memory);
-  }
-
-  return lines.join("\n");
+  const labels = answerLabelsFor(question);
+  const text = question.options.filter((option) => labels.includes(option.label)).map((option) => `${option.label}. ${option.text}`).join("\n");
+  return text || labels.join("");
 }
 
 function shuffle(items) {
-  const copy = [...items];
-  for (let index = copy.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
   }
-  return copy;
+  return result;
 }
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
+function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
 function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  return String(value).replace(/[&<>'\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#039;", '\"': "&quot;" })[char]);
 }
 
 function registerOfflineCache() {
-  if (!("serviceWorker" in navigator)) {
-    els.offlineStatus.textContent = "本地可用";
-    return;
-  }
-  navigator.serviceWorker
-    .register("./sw.js")
-    .then(() => {
-      els.offlineStatus.textContent = "离线可用";
-    })
-    .catch(() => {
-      els.offlineStatus.textContent = "本地可用";
-    });
+  if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
