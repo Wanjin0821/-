@@ -1,11 +1,11 @@
 {
-  "name": "AI 发电产业题库",
-  "short_name": "AI 题库",
+  "name": "知练 · AI 发电产业题库",
+  "short_name": "知练",
   "description": "中国华电集团人工智能（发电产业）技能大赛培训题库刷题工具",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f6f8fb",
-  "theme_color": "#0f766e",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "./public/icon.svg",

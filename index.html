@@ -3,12 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="AI 题库" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>AI 发电产业题库</title>
+    <meta name="apple-mobile-web-app-title" content="知练" />
+    <title>知练 · AI 发电产业题库</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./public/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./public/icon-192.png" />
@@ -16,140 +15,119 @@
   </head>
   <body>
     <div id="app">
-      <aside class="rail" aria-label="题库导航">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">AI</div>
-          <div>
-            <h1>AI 发电产业题库</h1>
-            <p>PDF 题库 · 1000 题</p>
-          </div>
-        </div>
+      <aside class="side-nav" aria-label="刷题模式">
+        <a class="brand" href="#" aria-label="知练首页">
+          <span class="brand-face" aria-hidden="true"><i></i><i></i><b></b></span>
+          <span>知练</span>
+        </a>
 
-        <nav class="mode-list" aria-label="练习模式">
-          <button class="mode-button active" data-mode="sequence" type="button">
-            <span class="icon" aria-hidden="true">▶</span>
-            顺序练习
-          </button>
-          <button class="mode-button" data-mode="random" type="button">
-            <span class="icon" aria-hidden="true">↯</span>
-            随机练习
-          </button>
-          <button class="mode-button" data-mode="wrong" type="button">
-            <span class="icon" aria-hidden="true">!</span>
-            错题本
-          </button>
-          <button class="mode-button" data-mode="favorite" type="button">
-            <span class="icon" aria-hidden="true">★</span>
-            收藏
-          </button>
+        <nav class="mode-list">
+          <button class="mode-button active" data-mode="sequence" type="button"><span class="mode-icon">→</span><span>顺序练习</span></button>
+          <button class="mode-button" data-mode="learn" type="button"><span class="mode-icon">◉</span><span>学习模式</span></button>
+          <button class="mode-button" data-mode="random" type="button"><span class="mode-icon">⌁</span><span>随机练习</span></button>
+          <button class="mode-button" data-mode="speed" type="button"><span class="mode-icon">⚡</span><span>速刷模式</span></button>
+          <button class="mode-button" data-mode="exam" type="button"><span class="mode-icon">✓</span><span>模拟考试</span></button>
+          <button class="mode-button" data-mode="wrong" type="button"><span class="mode-icon">↻</span><span>错题重练</span></button>
+          <button class="mode-button" data-mode="favorite" type="button"><span class="mode-icon">★</span><span>我的收藏</span></button>
         </nav>
 
-        <section class="filter-block" aria-labelledby="type-filter-title">
-          <div class="section-label" id="type-filter-title">题型筛选</div>
-          <label><input type="checkbox" value="single" checked /> 单选题</label>
-          <label><input type="checkbox" value="multiple" checked /> 多选题</label>
-          <label><input type="checkbox" value="judge" checked /> 判断题</label>
-          <label><input type="checkbox" value="essay" checked /> 论述题</label>
-        </section>
-
-        <section class="filter-block compact" aria-labelledby="jump-title">
-          <div class="section-label" id="jump-title">快速跳转</div>
-          <div class="jump-row">
-            <input id="jumpInput" inputmode="numeric" placeholder="题号" />
-            <button id="jumpButton" type="button" title="跳转到当前题型题号">跳转</button>
-          </div>
-        </section>
+        <div class="side-foot">
+          <span class="tiny-orb" aria-hidden="true">✓</span>
+          <p><strong>离线可用</strong><span>进度自动保存在本机</span></p>
+        </div>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
-          <div class="search-wrap">
-            <span aria-hidden="true">⌕</span>
-            <input id="searchInput" type="search" placeholder="搜索题干、选项或答案" />
+          <button id="mobileMenuButton" class="circle-button menu-button" type="button" aria-label="打开模式菜单">☰</button>
+          <div>
+            <p id="modeEyebrow" class="mode-eyebrow">顺序练习</p>
+            <h1 id="modeTitle">稳稳向前，每题都算数</h1>
           </div>
-          <div class="toolbar-actions">
-            <button id="resetProgressButton" class="ghost-button" type="button" title="清空本地答题记录">重置进度</button>
-            <button id="offlineStatus" class="status-pill" type="button" disabled>离线可用</button>
+          <div class="top-actions">
+            <label class="search-control">
+              <span aria-hidden="true">⌕</span>
+              <input id="searchInput" type="search" placeholder="搜索题目" aria-label="搜索题目" />
+            </label>
+            <button id="settingsButton" class="circle-button" type="button" aria-label="练习设置">•••</button>
           </div>
         </header>
 
-        <section id="questionShell" class="question-shell" aria-live="polite">
-          <div class="question-meta">
-            <div>
+        <section id="settingsPanel" class="settings-panel hidden" aria-label="练习设置">
+          <div>
+            <strong>题型</strong>
+            <div class="type-filters">
+              <label><input type="checkbox" value="single" checked /><span>单选</span></label>
+              <label><input type="checkbox" value="multiple" checked /><span>多选</span></label>
+              <label><input type="checkbox" value="judge" checked /><span>判断</span></label>
+              <label><input type="checkbox" value="essay" checked /><span>论述</span></label>
+            </div>
+          </div>
+          <div class="jump-control">
+            <label for="jumpInput">跳到题号</label>
+            <input id="jumpInput" inputmode="numeric" placeholder="如 128" />
+            <button id="jumpButton" type="button">前往</button>
+          </div>
+          <button id="resetProgressButton" class="text-button danger" type="button">重置全部进度</button>
+        </section>
+
+        <div class="content-grid">
+          <section id="questionShell" class="question-shell" aria-live="polite">
+            <div class="progress-head">
               <span id="typeBadge">单选题</span>
-              <span id="positionText">第 1 / 1000 题</span>
+              <strong id="positionText">1 / 1000</strong>
             </div>
             <div class="question-progress" aria-hidden="true"><span></span></div>
-          </div>
 
-          <div class="question-head">
-            <h2 id="questionTitle"></h2>
-            <button id="favoriteButton" class="icon-button" type="button" title="收藏本题" aria-label="收藏本题">☆</button>
-          </div>
-
-          <div id="optionList" class="option-list"></div>
-
-          <div id="essayArea" class="essay-area hidden">
-            <textarea id="essayDraft" placeholder="这里可以写自己的作答要点，本地保存"></textarea>
-            <div class="essay-actions">
-              <button id="showEssayAnswer" class="secondary-button" type="button">查看参考答案</button>
-              <button id="markEssayWrong" class="ghost-button" type="button">标为需复习</button>
+            <div class="question-head">
+              <h2 id="questionTitle"></h2>
+              <button id="favoriteButton" class="favorite-button" type="button" aria-label="收藏本题" aria-pressed="false">☆</button>
             </div>
-          </div>
 
-          <div id="feedbackBox" class="feedback-box hidden"></div>
+            <div id="optionList" class="option-list"></div>
 
-          <div class="answer-panel">
-            <div>
-              <div class="section-label">答案 / 参考</div>
-              <p id="answerText">提交后显示答案</p>
+            <div id="essayArea" class="essay-area hidden">
+              <textarea id="essayDraft" placeholder="写下你的作答要点…"></textarea>
+              <button id="markEssayWrong" class="text-button" type="button">加入错题重练</button>
             </div>
-          </div>
 
-          <div id="explanationPanel" class="explanation-panel hidden">
-            <div class="section-label">解析 / 记忆点</div>
-            <p id="explanationText"></p>
-          </div>
+            <div id="feedbackBox" class="feedback-box hidden"></div>
+            <div id="answerPanel" class="answer-panel hidden">
+              <span>正确答案</span>
+              <p id="answerText"></p>
+            </div>
 
-          <footer class="question-actions" aria-label="答题操作">
-            <button id="prevButton" class="secondary-button" type="button">上一题</button>
-            <button id="submitButton" class="primary-button" type="button">提交答案</button>
-            <button id="nextButton" class="secondary-button" type="button">下一题</button>
-          </footer>
-        </section>
+            <footer class="question-actions">
+              <button id="prevButton" class="nav-button" type="button" aria-label="上一题">←</button>
+              <span class="keyboard-tip">按数字键选答案 · Enter 确认</span>
+              <button id="submitButton" class="primary-button" type="button">确认答案</button>
+              <button id="nextButton" class="nav-button" type="button" aria-label="下一题">→</button>
+            </footer>
+          </section>
+
+          <aside class="focus-panel" aria-label="今日学习数据">
+            <div class="streak-card">
+              <span class="streak-icon" aria-hidden="true">⚡</span>
+              <div><strong id="streakCount">0</strong><span>连续答对</span></div>
+            </div>
+            <div class="today-head"><strong>今天</strong><span id="todayDate"></span></div>
+            <div class="metric-list">
+              <div><span>已完成</span><strong id="doneCount">0 <small>题</small></strong></div>
+              <div><span>正确率</span><strong id="accuracyText">0%</strong></div>
+              <div><span>错题</span><strong id="wrongCount">0</strong></div>
+              <div><span>收藏</span><strong id="favCount">0</strong></div>
+            </div>
+            <div class="daily-goal">
+              <div><strong>每日目标</strong><span id="goalText">0 / 30</span></div>
+              <div class="goal-track"><span id="goalProgress"></span></div>
+            </div>
+            <p id="modeHint" class="mode-hint">按题库顺序稳步推进，适合系统复习。</p>
+          </aside>
+        </div>
       </main>
-
-      <aside class="inspector" aria-label="学习进度">
-        <section>
-          <div class="section-label">今日进度</div>
-          <div class="progress-ring">
-            <div>
-              <strong id="accuracyText">0%</strong>
-              <span>正确率</span>
-            </div>
-          </div>
-          <div class="stat-grid">
-            <div><strong id="doneCount">0</strong><span>已练</span></div>
-            <div><strong id="wrongCount">0</strong><span>错题</span></div>
-            <div><strong id="favCount">0</strong><span>收藏</span></div>
-            <div><strong id="noteCount">0</strong><span>笔记</span></div>
-          </div>
-        </section>
-
-        <section>
-          <div class="section-label">题库分布</div>
-          <div id="distribution" class="distribution"></div>
-        </section>
-
-        <section>
-          <div class="section-label">本题笔记</div>
-          <textarea id="noteInput" class="note-input" placeholder="写下易错点、关键词或背诵提示"></textarea>
-        </section>
-      </aside>
     </div>
 
     <script src="./src/questionBank.js"></script>
-    <script src="./src/explanations.js"></script>
     <script src="./src/app.js"></script>
   </body>
 </html>
