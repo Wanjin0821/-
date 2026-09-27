@@ -1,4 +1,4 @@
-const CACHE_NAME = "zhilian-quiz-v5";
+const CACHE_NAME = "zhilian-quiz-v8";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,11 +6,16 @@ const ASSETS = [
   "./src/app.js",
   "./src/questionBank.js",
   "./src/questionBank.json",
+  "./src/recitationBank.js",
+  "./src/recitation.js",
+  "./src/recitation.css",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(
+      ASSETS.map((url) => new Request(url, { cache: "reload" }))
+    ))
   );
   self.skipWaiting();
 });
@@ -18,20 +23,20 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-    )
+      Promise.all(keys.filter((key) => key !== CACHE_NAME && /^(ai-power-quiz-|zhilian-quiz-)/.test(key))
+        .map((key) => caches.delete(key)))
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(event.request);
       if (cached) return cached;
       return fetch(event.request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        if (response.ok) event.waitUntil(cache.put(event.request, response.clone()));
         return response;
       });
     })

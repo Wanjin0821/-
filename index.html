@@ -12,6 +12,7 @@
     <link rel="icon" href="./public/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./public/icon-192.png" />
     <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/recitation.css" />
   </head>
   <body>
     <div id="app">
@@ -24,6 +25,7 @@
         <nav class="mode-list">
           <button class="mode-button active" data-mode="sequence" type="button"><span class="mode-icon">→</span><span>顺序练习</span></button>
           <button class="mode-button" data-mode="learn" type="button"><span class="mode-icon">◉</span><span>学习模式</span></button>
+          <button class="mode-button" data-mode="recite" type="button" aria-label="理论背诵"><span class="mode-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1Zm0 0v15"/></svg></span><span>理论背诵</span></button>
           <button class="mode-button" data-mode="random" type="button"><span class="mode-icon">⌁</span><span>随机练习</span></button>
           <button class="mode-button" data-mode="speed" type="button"><span class="mode-icon">⚡</span><span>速刷模式</span></button>
           <button class="mode-button" data-mode="exam" type="button"><span class="mode-icon">✓</span><span>模拟考试</span></button>
@@ -44,7 +46,7 @@
             <p id="modeEyebrow" class="mode-eyebrow">顺序练习</p>
             <h1 id="modeTitle">稳稳向前，每题都算数</h1>
           </div>
-          <div class="top-actions">
+          <div id="quizTopActions" class="top-actions">
             <label class="search-control">
               <span aria-hidden="true">⌕</span>
               <input id="searchInput" type="search" placeholder="搜索题目" aria-label="搜索题目" />
@@ -71,8 +73,46 @@
           <button id="resetProgressButton" class="text-button danger" type="button">重置全部进度</button>
         </section>
 
-        <div class="content-grid">
+        <section id="recitationModule" class="recitation-module hidden" aria-label="理论题背诵">
+          <div class="recite-overview">
+            <div class="recite-intro"><strong>长答案，也能一点点记住。</strong><p>先记口诀，再背要点，最后对照原文。</p></div>
+            <div class="recite-mastery"><div><span>已掌握 <strong id="reciteMasteredCount">0 / 50</strong></span><span id="recitePercent">0%</span></div><div class="recite-track"><span id="reciteMasteryBar"></span></div></div>
+          </div>
+          <div class="recite-toolbar">
+            <div class="recite-view-switch" role="group" aria-label="背诵视图"><button type="button" data-recite-view="cards" aria-pressed="true">分层背诵</button><button type="button" data-recite-view="quick" aria-pressed="false">口诀速览</button></div>
+            <label class="recite-search"><span class="sr-only">搜索背诵内容</span><input id="reciteSearch" type="search" placeholder="搜索题目、口诀或题号" /></label>
+            <label><span class="sr-only">专题筛选</span><select id="reciteTopic"><option value="all">全部专题</option></select></label>
+            <label><span class="sr-only">掌握程度筛选</span><select id="reciteFilter"><option value="all">全部状态</option><option value="new">未背</option><option value="review">需巩固</option><option value="mastered">已掌握</option></select></label>
+          </div>
+          <p id="reciteNotice" class="recite-notice" role="status" aria-live="polite"></p>
+          <div id="reciteEmpty" class="recite-empty hidden"><span aria-hidden="true">✓</span><h2>这个范围里暂时没有题目</h2><p>试试其他专题或掌握程度，也可以回到全部 50 题。</p><button id="reciteClearFilters" class="primary-button" type="button">查看全部题目</button></div>
+          <div id="reciteCards" class="recite-layout">
+            <article id="reciteCard" class="recite-card" aria-labelledby="reciteTitle">
+              <div class="recite-card-meta"><span id="reciteQuestionMeta"></span><span id="recitePosition"></span></div>
+              <h2 id="reciteTitle"></h2><p id="reciteQuestion" class="recite-question"></p>
+              <div class="recite-layer-tabs" role="group" aria-label="背诵层次"><button type="button" data-recite-layer="tips">1 记口诀</button><button type="button" data-recite-layer="summary">2 背要点</button><button type="button" data-recite-layer="standard">3 看原文</button></div>
+              <div class="recite-answer-toolbar"><p id="reciteLayerHint"></p><button id="reciteSelfTest" class="text-button" type="button" aria-pressed="false">遮住自测</button></div>
+              <div id="reciteAnswer" class="recite-prose"></div>
+              <div id="reciteRecall" class="recite-recall hidden"><div class="recite-recall-symbol" aria-hidden="true">?</div><strong>先想一想，再看答案</strong><p>试着用 30 秒说出关键词，或用 2 分钟写下要点。</p><label for="reciteDraft" class="sr-only">默写草稿</label><textarea id="reciteDraft" placeholder="在这里默写关键词或答案（可选，自动保存）"></textarea><button id="reciteReveal" class="primary-button" type="button">查看答案，对照回忆</button></div>
+              <details id="reciteDraftCompare" class="recite-draft-compare hidden"><summary>对照我的默写</summary><p id="reciteDraftText"></p></details>
+              <div class="recite-rating"><div><strong>这道题，记住了吗？</strong><p id="reciteStatusLabel">当前：未背 · 按自己的掌握程度标记</p></div><div class="recite-rating-buttons"><button type="button" data-recite-rate="new" class="text-button">未背</button><button type="button" data-recite-rate="review" class="recite-rating-button">需巩固</button><button type="button" data-recite-rate="mastered" class="recite-rating-button mastered">已掌握 ✓</button></div></div>
+              <footer class="recite-navigation"><button id="recitePrev" class="nav-button" type="button" aria-label="上一道背诵题">←</button><span>进度自动保存 · 可随时回来</span><button id="reciteNext" class="primary-button" type="button">下一题 →</button></footer>
+            </article>
+            <aside class="recite-side"><details id="reciteDirectory"><summary><strong>背诵目录</strong><span id="reciteDirectoryCount">50 题</span></summary><p class="recite-legend"><span>○ 未背</span><span>◐ 需巩固</span><span>✓ 已掌握</span></p><div id="reciteDirectoryList" class="recite-directory-list"></div></details><div class="recite-guide"><strong>三轮记忆，小步积累</strong><ol><li>记口诀：串起一级关键词。</li><li>背要点：关键词 + 一句解释。</li><li>看原文：补充场景与例子。</li></ol><p>标记「需巩固」的题，下次优先筛选复习。</p></div></aside>
+          </div>
+          <section id="reciteQuick" class="recite-quick hidden" aria-label="口诀速览"><div class="recite-quick-head"><h2>让关键词，先在脑中过一遍。</h2><p>点击任意一题进入分层背诵；口诀只是提示，作答时记得展开。</p></div><div id="reciteQuickList"></div></section>
+          <p id="reciteSourceNote" class="recite-source"></p>
+        </section>
+
+        <div id="quizContentGrid" class="content-grid">
           <section id="questionShell" class="question-shell" aria-live="polite">
+            <div id="wrongReviewBar" class="review-toolbar hidden">
+              <div>
+                <strong id="wrongReviewTitle">错题重练</strong>
+                <p id="wrongReviewHint">点击重新练习，隐藏答案后再做一遍。</p>
+              </div>
+              <button id="restartWrongButton" class="primary-button" type="button">重新练习</button>
+            </div>
             <div class="progress-head">
               <span id="typeBadge">单选题</span>
               <strong id="positionText">1 / 1000</strong>
@@ -128,6 +168,8 @@
     </div>
 
     <script src="./src/questionBank.js"></script>
+    <script src="./src/recitationBank.js"></script>
+    <script src="./src/recitation.js"></script>
     <script src="./src/app.js"></script>
   </body>
 </html>
