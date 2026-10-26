@@ -9,7 +9,7 @@ const MODE_COPY = {
   random: ["随机练习", "打乱顺序，保持新鲜", "题目随机出现，帮你摆脱顺序记忆。"],
   speed: ["速刷模式", "快一点，手感正热", "确认后自动前进，适合碎片时间集中刷题。"],
   exam: ["模拟考试", "专注作答，最后见分晓", "随机抽取 20 题，作答过程不显示对错。"],
-  wrong: ["错题重练", "再见一次，这次拿下", "只练曾经答错的题，答对后自动移出。"],
+  wrong: ["错题重练", "再见一次，这次拿下", "历史错题持续保留，答对或重置练习进度都不会删除；可单独清空错题。"],
   favorite: ["我的收藏", "重要的题，值得再看", "集中回顾你主动收藏的题目。"],
 };
 
@@ -39,6 +39,7 @@ const els = {
   wrongReviewTitle: $("#wrongReviewTitle"),
   wrongReviewHint: $("#wrongReviewHint"),
   restartWrongButton: $("#restartWrongButton"),
+  clearWrongButton: $("#clearWrongButton"),
   typeBadge: $("#typeBadge"),
   positionText: $("#positionText"),
   questionTitle: $("#questionTitle"),
@@ -198,6 +199,7 @@ function wireEvents() {
   els.nextButton.addEventListener("click", () => moveQuestion(1));
   els.submitButton.addEventListener("click", submitCurrent);
   els.restartWrongButton.addEventListener("click", startWrongReview);
+  els.clearWrongButton.addEventListener("click", clearWrongQuestions);
   els.favoriteButton.addEventListener("click", toggleFavorite);
   els.markEssayWrong.addEventListener("click", markEssayForReview);
   els.essayDraft.addEventListener("input", () => {
@@ -269,17 +271,18 @@ function startWrongReview() {
 function renderWrongReviewControls() {
   els.wrongReviewBar.classList.toggle("hidden", state.mode !== "wrong");
   if (state.mode !== "wrong") return;
-  const remaining = questionBank.filter((question) => state.wrong[question.id] && matchesCurrentFilters(question)).length;
+  const matchingCount = questionBank.filter((question) => state.wrong[question.id] && matchesCurrentFilters(question)).length;
   const review = activeWrongReview();
   const results = review ? review.ids.map((id) => review.submitted[id]).filter(Boolean) : [];
   const complete = review && results.length === review.ids.length;
   els.wrongReviewTitle.textContent = complete ? "本轮已完成" : review ? "本轮错题练习" : "再练一次，巩固易错点";
   els.wrongReviewHint.textContent = complete
-    ? `本轮答对 ${results.filter((result) => result.correct).length} / ${review.ids.length} 题，当前还有 ${remaining} 道错题。`
-    : review ? `已完成 ${results.length} / ${review.ids.length} 题。答对后移出错题本，本轮保留作答结果。`
-    : remaining ? `当前筛选有 ${remaining} 道错题，点击后隐藏答案重新作答。` : "当前筛选没有待重练的错题。";
-  els.restartWrongButton.disabled = !remaining;
-  els.restartWrongButton.textContent = remaining ? `重新练习（${remaining} 题）` : "暂无错题";
+    ? `本轮答对 ${results.filter((result) => result.correct).length} / ${review.ids.length} 题。历史错题仍保留，可以再次重练。`
+    : review ? `已完成 ${results.length} / ${review.ids.length} 题。答对不会删除，只有“清空错题”才会移除记录。`
+    : matchingCount ? `当前筛选有 ${matchingCount} 道历史错题，重练或重置练习进度都不会删除。` : "当前筛选没有错题，可调整筛选条件。";
+  els.restartWrongButton.disabled = !matchingCount;
+  els.restartWrongButton.textContent = matchingCount ? `重新练习（${matchingCount} 题）` : "暂无错题";
+  els.clearWrongButton.disabled = !Object.keys(state.wrong).length;
 }
 
 function applyFilters() {
@@ -422,7 +425,9 @@ function submitCurrent() {
   state.submitted[question.id] = result;
   state.selected[question.id] = [...result.selected];
   if (question.type === "essay") state.essayDrafts[question.id] = attempt.essayDrafts[question.id] || "";
-  if (result.correct) { delete state.wrong[question.id]; state.streak += 1; }
+  // The wrong-question library is a history, independent of the latest result.
+  // Only its dedicated clear action may remove these records.
+  if (result.correct) { state.streak += 1; }
   else { state.wrong[question.id] = true; state.streak = 0; }
   saveState();
   renderQuestion();
@@ -500,17 +505,34 @@ function markEssayForReview() {
 }
 
 function resetProgress() {
-  if (!window.confirm("确定清空答题、错题和收藏记录吗？")) return;
+  if (!window.confirm("确定重置练习进度吗？将清空答题记录、作答草稿和练习位置，保留历史错题、收藏及理论背诵进度。")) return;
   window.clearTimeout(speedTimer);
-  Object.assign(state, { currentIndex: 0, selected: {}, submitted: {}, wrong: {}, favorites: {}, essayDrafts: {}, streak: 0, modeProgress: {}, wrongReview: null });
+  Object.assign(state, { currentIndex: 0, selected: {}, submitted: {}, essayDrafts: {}, streak: 0, modeProgress: {}, wrongReview: null });
   restoreModeProgress();
   saveState();
   applyFilters();
   els.settingsPanel.classList.add("hidden");
 }
 
+function clearWrongQuestions() {
+  const count = Object.keys(state.wrong).length;
+  if (!count || !window.confirm(`确定清空全部 ${count} 道历史错题吗？此操作不受当前筛选限制，且无法撤销。不会清除其他模式的答题进度、收藏或理论背诵记录。`)) return;
+  state.wrong = {};
+  state.wrongReview = null;
+  delete state.modeProgress.wrong;
+  if (state.mode === "wrong") {
+    state.currentIndex = 0;
+    restoreModeProgress();
+    applyFilters();
+  } else {
+    saveState();
+    renderStats();
+  }
+}
+
 function handleKeyboard(event) {
-  if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if (["INPUT", "TEXTAREA", "BUTTON", "SELECT", "SUMMARY"].includes(document.activeElement.tagName)
+    || document.activeElement.isContentEditable) return;
   const question = currentQuestion();
   if (!question) return;
   if (/^[1-4]$/.test(event.key) && question.type !== "essay") {

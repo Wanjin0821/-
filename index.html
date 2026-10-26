@@ -70,7 +70,10 @@
             <input id="jumpInput" inputmode="numeric" placeholder="如 128" />
             <button id="jumpButton" type="button">前往</button>
           </div>
-          <button id="resetProgressButton" class="text-button danger" type="button">重置全部进度</button>
+          <div class="reset-control">
+            <button id="resetProgressButton" class="text-button danger" type="button">重置练习进度</button>
+            <small>保留错题、收藏与理论背诵记录</small>
+          </div>
         </section>
 
         <section id="recitationModule" class="recitation-module hidden" aria-label="理论题背诵">
@@ -111,7 +114,10 @@
                 <strong id="wrongReviewTitle">错题重练</strong>
                 <p id="wrongReviewHint">点击重新练习，隐藏答案后再做一遍。</p>
               </div>
-              <button id="restartWrongButton" class="primary-button" type="button">重新练习</button>
+              <div class="review-toolbar-actions">
+                <button id="restartWrongButton" class="primary-button" type="button">重新练习</button>
+                <button id="clearWrongButton" class="text-button danger" type="button">清空错题</button>
+              </div>
             </div>
             <div class="progress-head">
               <span id="typeBadge">单选题</span>
@@ -154,7 +160,7 @@
             <div class="metric-list">
               <div><span>已完成</span><strong id="doneCount">0 <small>题</small></strong></div>
               <div><span>正确率</span><strong id="accuracyText">0%</strong></div>
-              <div><span>错题</span><strong id="wrongCount">0</strong></div>
+              <div><span>历史错题</span><strong id="wrongCount">0</strong></div>
               <div><span>收藏</span><strong id="favCount">0</strong></div>
             </div>
             <div class="daily-goal">
