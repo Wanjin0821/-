@@ -1,6 +1,6 @@
 const STORAGE_KEY = "zhilian-quiz-state-v2";
 const ALL_TYPES = ["single", "multiple", "judge", "essay"];
-const SHUFFLED_MODES = ["random", "speed", "exam"];
+const SHUFFLED_MODES = ["random", "speed"];
 const MAX_SAVED_SEARCHES = 40;
 const MODE_COPY = {
   sequence: ["顺序练习", "稳稳向前，每题都算数", "按题库顺序稳步推进，适合系统复习。"],
@@ -8,7 +8,7 @@ const MODE_COPY = {
   recite: ["理论背诵", "每天记一点，考场多一分底气", "50 道论述题，分层背诵、遮挡自测。"],
   random: ["随机练习", "打乱顺序，保持新鲜", "题目随机出现，帮你摆脱顺序记忆。"],
   speed: ["速刷模式", "快一点，手感正热", "确认后自动前进，适合碎片时间集中刷题。"],
-  exam: ["模拟考试", "专注作答，最后见分晓", "随机抽取 20 题，作答过程不显示对错。"],
+  exam: ["模拟考试", "题量自己定，做完就知道", "自定义题量，优先抽未出现的题。单选、判断选后判分；多选选齐后确认，论述题对照参考答案自评。"],
   wrong: ["错题重练", "再见一次，这次拿下", "历史错题持续保留，答对或重置练习进度都不会删除；可单独清空错题。"],
   favorite: ["我的收藏", "重要的题，值得再看", "集中回顾你主动收藏的题目。"],
 };
@@ -35,6 +35,14 @@ const els = {
   jumpButton: $("#jumpButton"),
   resetProgressButton: $("#resetProgressButton"),
   questionShell: $("#questionShell"),
+  examBar: $("#examBar"),
+  examCountInput: $("#examCountInput"),
+  newExamButton: $("#newExamButton"),
+  examPoolText: $("#examPoolText"),
+  examScopeHint: $("#examScopeHint"),
+  examSummary: $("#examSummary"),
+  examNotice: $("#examNotice"),
+  keyboardTip: $("#keyboardTip"),
   wrongReviewBar: $("#wrongReviewBar"),
   wrongReviewTitle: $("#wrongReviewTitle"),
   wrongReviewHint: $("#wrongReviewHint"),
@@ -69,6 +77,7 @@ init();
 function init() {
   questionBank = window.QUESTION_BANK || [];
   restoreModeProgress(true);
+  els.examCountInput.value = String(state.exam.count);
   wireEvents();
   syncControls();
   applyFilters();
@@ -90,6 +99,7 @@ function loadState() {
     streak: 0,
     modeProgress: {},
     wrongReview: null,
+    exam: { count: 20, usedIds: [], paper: null, legacyPending: false },
   };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
@@ -99,6 +109,14 @@ function loadState() {
     loaded.search = typeof loaded.search === "string" ? loaded.search : "";
     loaded.currentIndex = Number.isInteger(loaded.currentIndex) && loaded.currentIndex >= 0 ? loaded.currentIndex : 0;
     loaded.modeProgress = isRecord(loaded.modeProgress) ? loaded.modeProgress : {};
+    const exam = isRecord(saved.exam) ? saved.exam : {};
+    loaded.exam = {
+      count: Number.isInteger(exam.count) && exam.count > 0 ? exam.count : 20,
+      usedIds: Array.isArray(exam.usedIds) ? [...new Set(exam.usedIds.filter(id => typeof id === "string"))] : [],
+      paper: isRecord(exam.paper) && Array.isArray(exam.paper.ids) && isRecord(exam.paper.selected)
+        && isRecord(exam.paper.submitted) && isRecord(exam.paper.essayDrafts) ? exam.paper : null,
+      legacyPending: isRecord(saved.exam) ? exam.legacyPending === true : Array.isArray(loaded.modeProgress.exam?.orderIds),
+    };
     const review = loaded.wrongReview;
     if (!isRecord(review) || !Array.isArray(review.ids) || !isRecord(review.selected)
       || !isRecord(review.submitted) || !isRecord(review.essayDrafts)) loaded.wrongReview = null;
@@ -146,6 +164,10 @@ function rememberPosition() {
   const progress = state.modeProgress[state.mode];
   progress.activeTypes = [...state.activeTypes];
   progress.search = state.search;
+  if (state.mode === "exam") {
+    if (state.exam.paper) state.exam.paper.index = state.currentIndex;
+    return;
+  }
   const question = currentQuestion();
   if (!question) return;
   const key = scopeKey();
@@ -178,6 +200,8 @@ function orderedIds(progress) {
 function wireEvents() {
   els.modeButtons.forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
   els.typeFilters.forEach((checkbox) => checkbox.addEventListener("change", () => {
+    els.examNotice.textContent = "";
+    els.examCountInput.setAttribute("aria-invalid", "false");
     rememberPosition();
     state.activeTypes = els.typeFilters.filter((item) => item.checked).map((item) => item.value);
     if (!state.activeTypes.length) {
@@ -187,6 +211,8 @@ function wireEvents() {
     applyFilters();
   }));
   els.searchInput.addEventListener("input", () => {
+    els.examNotice.textContent = "";
+    els.examCountInput.setAttribute("aria-invalid", "false");
     rememberPosition();
     state.search = els.searchInput.value.trim();
     applyFilters();
@@ -200,6 +226,12 @@ function wireEvents() {
   els.submitButton.addEventListener("click", submitCurrent);
   els.restartWrongButton.addEventListener("click", startWrongReview);
   els.clearWrongButton.addEventListener("click", clearWrongQuestions);
+  els.newExamButton.addEventListener("click", startNewExam);
+  els.examCountInput.addEventListener("keydown", event => { if (event.key === "Enter") startNewExam(); });
+  els.examCountInput.addEventListener("input", () => {
+    els.examCountInput.setAttribute("aria-invalid", "false");
+    els.examNotice.textContent = "修改题量后，点击“重新随机组卷”生效。";
+  });
   els.favoriteButton.addEventListener("click", toggleFavorite);
   els.markEssayWrong.addEventListener("click", markEssayForReview);
   els.essayDraft.addEventListener("input", () => {
@@ -238,6 +270,7 @@ function syncControls() {
   $("#quizTopActions").classList.toggle("hidden", isReciting);
   $("#recitationModule").classList.toggle("hidden", !isReciting);
   if (isReciting) els.settingsPanel.classList.add("hidden");
+  if (state.mode === "exam") els.examCountInput.value = String(state.exam.count);
 }
 
 function matchesCurrentFilters(question) {
@@ -253,8 +286,125 @@ function activeWrongReview() {
 }
 
 function attemptState(question) {
+  if (state.mode === "exam" && state.exam.paper?.ids.includes(question?.id)) return state.exam.paper;
   const review = activeWrongReview();
   return question && review?.ids.includes(question.id) ? review : state;
+}
+
+function examPool() {
+  return questionBank.filter(matchesCurrentFilters);
+}
+
+function drawExamIds(pool, count) {
+  const bankIds = new Set(questionBank.map(question => question.id));
+  const used = new Set(state.exam.usedIds.filter(id => bankIds.has(id)));
+  const previous = new Set(state.exam.paper?.ids || []);
+  const fresh = shuffle(pool.filter(id => !used.has(id)));
+  const ids = fresh.slice(0, count);
+  if (ids.length < count) {
+    // Start the next cycle only for this pool; first avoid the previous paper
+    // and never duplicate a question inside the new paper.
+    pool.forEach(id => used.delete(id));
+    const chosen = new Set(ids);
+    const candidates = pool.filter(id => !chosen.has(id));
+    ids.push(...[
+      ...shuffle(candidates.filter(id => !previous.has(id))),
+      ...shuffle(candidates.filter(id => previous.has(id))),
+    ].slice(0, count - ids.length));
+  }
+  ids.forEach(id => used.add(id));
+  state.exam.usedIds = [...used];
+  const mixed = shuffle(ids);
+  if (mixed.length > 1 && mixed.every((id, index) => id === state.exam.paper?.ids[index])) mixed.push(mixed.shift());
+  return mixed;
+}
+
+function makeExamPaper(ids) {
+  return { ids, scope: scopeKey(), activeTypes: [...state.activeTypes], search: state.search,
+    index: 0, selected: {}, submitted: {}, essayDrafts: {} };
+}
+
+function ensureExamPaper() {
+  if (state.exam.paper) {
+    const bankIds = new Set(questionBank.map(question => question.id));
+    state.exam.paper.ids = [...new Set(state.exam.paper.ids)].filter(id => bankIds.has(id));
+    return;
+  }
+  const pool = examPool().map(question => question.id);
+  if (!pool.length) return;
+  if (state.exam.legacyPending) {
+    const progress = state.modeProgress.exam;
+    const available = new Set(pool);
+    const ids = [...new Set(progress.orderIds || [])].filter(id => available.has(id)).slice(0, 20);
+    if (ids.length) {
+      const paper = makeExamPaper(ids);
+      for (const field of ["selected", "submitted", "essayDrafts"]) {
+        paper[field] = Object.fromEntries(ids.filter(id => state[field][id] !== undefined).map(id => [id, state[field][id]]));
+      }
+      const bookmark = progress.positions[scopeKey()];
+      const index = ids.indexOf(bookmark?.questionId);
+      paper.index = index >= 0 ? index : Number.isInteger(bookmark?.index) ? bookmark.index : 0;
+      state.exam.paper = paper;
+      state.exam.usedIds = ids;
+    }
+  }
+  state.exam.legacyPending = false;
+  if (!state.exam.paper) {
+    const count = Math.min(state.exam.count, pool.length);
+    state.exam.paper = makeExamPaper(drawExamIds(pool, count));
+    state.exam.count = count;
+    els.examCountInput.value = String(count);
+  }
+}
+
+function startNewExam() {
+  if (state.mode !== "exam") return;
+  const pool = examPool();
+  const value = String(els.examCountInput.value).trim();
+  const count = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(count) || count < 1 || count > pool.length) {
+    els.examNotice.textContent = pool.length ? `请输入 1～${pool.length} 之间的整数题量。` : "当前筛选没有可抽取的题目，请调整题型或搜索条件。";
+    els.examCountInput.setAttribute("aria-invalid", "true");
+    return;
+  }
+  const paper = state.exam.paper;
+  const hasWork = paper && (Object.keys(paper.submitted).length || Object.keys(paper.selected).length
+    || Object.values(paper.essayDrafts).some(draft => String(draft).trim()));
+  const unfinished = paper?.ids.some(id => !paper.submitted[id]);
+  if (hasWork && unfinished && !window.confirm("本卷还没做完，确定重新组卷吗？将开始一套新试卷，已提交的答题记录、历史错题和收藏仍会保留。")) return;
+  state.exam.paper = makeExamPaper(drawExamIds(pool.map(question => question.id), count));
+  state.exam.count = count;
+  state.exam.legacyPending = false;
+  state.currentIndex = 0;
+  els.examCountInput.value = String(count);
+  els.examCountInput.setAttribute("aria-invalid", "false");
+  els.examNotice.textContent = `已生成 ${count} 题新试卷，本卷内不重复。`;
+  applyFilters();
+}
+
+function renderExamControls() {
+  els.examBar.classList.toggle("hidden", state.mode !== "exam");
+  if (state.mode !== "exam") return;
+  const pool = examPool();
+  els.examCountInput.max = String(Math.max(pool.length, 1));
+  els.newExamButton.disabled = !pool.length;
+  els.examPoolText.textContent = `当前可抽 ${pool.length} 题 · 题型与搜索可在上方设置`;
+  const paper = state.exam.paper;
+  const pending = paper && paper.scope !== scopeKey();
+  els.examScopeHint.textContent = pending
+    ? "筛选已更改，点击重新组卷后应用；当前试卷保持不变。"
+    : "优先抽未出现的题，题库用尽后循环。刷新或切换模式可继续本卷。";
+  const results = paper ? paper.ids.map(id => paper.submitted[id]).filter(Boolean) : [];
+  const objectiveIds = new Set(questionBank.filter(question => question.type !== "essay").map(question => question.id));
+  const objective = paper ? paper.ids.filter(id => objectiveIds.has(id)) : [];
+  const answered = objective.filter(id => paper.submitted[id]);
+  const correct = answered.filter(id => paper.submitted[id].correct).length;
+  const complete = paper?.ids.length && results.length === paper.ids.length;
+  const score = !objective.length ? "论述题请对照参考答案自评"
+    : answered.length ? `客观题答对 ${correct} / ${answered.length}（已答）` : "客观题尚未作答";
+  els.examSummary.textContent = paper?.ids.length
+    ? `${complete ? "本卷已完成" : "本卷进度"} · 已答 ${results.length} / ${paper.ids.length} 题 · ${score}`
+    : "尚未组卷，请先选择有题目的范围。";
 }
 
 function startWrongReview() {
@@ -291,6 +441,18 @@ function applyFilters() {
     window.Recitation?.open();
     return;
   }
+  if (state.mode === "exam") {
+    ensureExamPaper();
+    const byId = new Map(questionBank.map(question => [question.id, question]));
+    filteredQuestions = (state.exam.paper?.ids || []).map(id => byId.get(id)).filter(Boolean);
+    const index = state.exam.paper?.index;
+    state.currentIndex = clamp(Number.isInteger(index) ? index : 0, 0, Math.max(filteredQuestions.length - 1, 0));
+    rememberPosition();
+    saveState();
+    renderQuestion();
+    renderStats();
+    return;
+  }
   const review = activeWrongReview();
   const reviewIds = review ? new Set(review.ids) : null;
   filteredQuestions = questionBank.filter((question) => {
@@ -304,7 +466,6 @@ function applyFilters() {
   if (SHUFFLED_MODES.includes(state.mode)) {
     const byId = new Map(filteredQuestions.map((question) => [question.id, question]));
     filteredQuestions = orderedIds(progress).filter((id) => byId.has(id)).map((id) => byId.get(id));
-    if (state.mode === "exam") filteredQuestions = filteredQuestions.slice(0, 20);
   }
   const bookmark = progress.positions[scopeKey()];
   const bookmarkedIndex = bookmark ? filteredQuestions.findIndex((question) => question.id === bookmark.questionId) : -1;
@@ -332,6 +493,7 @@ function currentQuestion() {
 function renderQuestion() {
   window.clearTimeout(speedTimer);
   renderWrongReviewControls();
+  renderExamControls();
   const question = currentQuestion();
   const total = visibleLength();
   if (!question) return renderEmpty();
@@ -342,7 +504,7 @@ function renderQuestion() {
   const isEssay = question.type === "essay";
   const isLearning = state.mode === "learn";
   const isExam = state.mode === "exam";
-  const answerVisible = isLearning || (Boolean(submitted) && !isExam);
+  const answerVisible = isLearning || Boolean(submitted);
 
   els.typeBadge.textContent = `${question.typeName} · 原题号 ${question.number}`;
   els.positionText.textContent = `${state.currentIndex + 1} / ${total}`;
@@ -357,18 +519,20 @@ function renderQuestion() {
   els.essayDraft.value = attempt.essayDrafts[question.id] || "";
 
   if (!isEssay) {
-    els.optionList.innerHTML = question.options.map((option) => optionTemplate(question, option, selected, submitted, answerVisible, isExam)).join("");
+    els.optionList.innerHTML = question.options.map((option) => optionTemplate(question, option, selected, submitted, answerVisible)).join("");
     $$(".option-row").forEach((row) => row.addEventListener("click", () => toggleOption(question, row.dataset.option)));
   }
 
-  renderFeedback(question, submitted, isLearning, isExam);
+  renderFeedback(question, submitted, isLearning);
   els.answerPanel.classList.toggle("hidden", !answerVisible);
   els.answerText.textContent = answerVisible ? formatAnswer(question) : "";
   els.prevButton.disabled = state.currentIndex <= 0;
   els.nextButton.disabled = state.currentIndex >= total - 1;
   els.submitButton.classList.toggle("hidden", isLearning);
-  els.submitButton.disabled = Boolean(submitted);
-  els.submitButton.textContent = submitted ? (isExam ? "已记录" : "已完成") : isEssay ? "完成本题" : "确认答案";
+  const immediate = isExam && ["single", "judge"].includes(question.type);
+  els.submitButton.disabled = Boolean(submitted) || immediate;
+  els.submitButton.textContent = submitted ? "已完成" : immediate ? "选择即判分" : isEssay ? (isExam ? "查看参考答案" : "完成本题") : "确认答案";
+  els.keyboardTip.textContent = immediate ? "选择后立即显示结果" : "按数字键选答案 · Enter 确认";
 }
 
 function renderEmpty() {
@@ -386,12 +550,12 @@ function renderEmpty() {
   els.questionShell.style.setProperty("--question-progress", "0%");
 }
 
-function optionTemplate(question, option, selected, submitted, answerVisible, isExam) {
+function optionTemplate(question, option, selected, submitted, answerVisible) {
   const selectedNow = selected.includes(option.label);
   const correct = answerVisible && answerLabelsFor(question).includes(option.label);
   const wrong = answerVisible && submitted && selectedNow && !correct;
   const classes = ["option-row", selectedNow ? "selected" : "", correct ? "correct" : "", wrong ? "wrong" : ""].filter(Boolean);
-  return `<button class="${classes.join(" ")}" type="button" data-option="${escapeHtml(option.label)}" ${submitted && !isExam ? "disabled" : ""}>
+  return `<button class="${classes.join(" ")}" type="button" data-option="${escapeHtml(option.label)}" ${submitted ? "disabled" : ""}>
     <span class="option-label">${escapeHtml(option.label)}</span><span class="option-text">${escapeHtml(option.text)}</span><span class="option-state">${correct ? "✓" : wrong ? "×" : ""}</span>
   </button>`;
 }
@@ -403,6 +567,7 @@ function toggleOption(question, label) {
   if (question.type === "multiple") selected.has(label) ? selected.delete(label) : selected.add(label);
   else { selected.clear(); selected.add(label); }
   attempt.selected[question.id] = Array.from(selected).sort();
+  if (state.mode === "exam" && ["single", "judge"].includes(question.type)) return submitCurrent();
   saveState();
   renderQuestion();
 }
@@ -414,7 +579,7 @@ function submitCurrent() {
   if (attempt.submitted[question.id]) return;
   let result;
   if (question.type === "essay") {
-    result = { selected: ["已完成"], correct: true, at: Date.now() };
+    result = { selected: ["已完成"], correct: state.mode === "exam" ? null : true, at: Date.now() };
   } else {
     const selected = attempt.selected[question.id] || [];
     if (!selected.length) return flashFeedback("先选一个答案吧", false);
@@ -428,24 +593,21 @@ function submitCurrent() {
   // The wrong-question library is a history, independent of the latest result.
   // Only its dedicated clear action may remove these records.
   if (result.correct) { state.streak += 1; }
-  else { state.wrong[question.id] = true; state.streak = 0; }
+  else if (result.correct === false) { state.wrong[question.id] = true; state.streak = 0; }
   saveState();
   renderQuestion();
   renderStats();
   if (state.mode === "speed" && state.currentIndex < visibleLength() - 1) speedTimer = window.setTimeout(() => moveQuestion(1), 720);
 }
 
-function renderFeedback(question, submitted, isLearning, isExam) {
+function renderFeedback(question, submitted, isLearning) {
   if (isLearning) {
     els.feedbackBox.textContent = "学习模式 · 答案已直接标出";
     els.feedbackBox.className = "feedback-box learn";
   } else if (!submitted) {
     els.feedbackBox.className = "feedback-box hidden";
-  } else if (isExam) {
-    els.feedbackBox.textContent = "答案已记录，继续下一题";
-    els.feedbackBox.className = "feedback-box neutral";
   } else if (question.type === "essay" || submitted.correct) {
-    els.feedbackBox.textContent = question.type === "essay" ? "本题已完成" : "漂亮，答对了！";
+    els.feedbackBox.textContent = question.type === "essay" ? "本题已完成，请对照参考答案自评" : "漂亮，答对了！";
     els.feedbackBox.className = "feedback-box ok";
   } else {
     els.feedbackBox.textContent = `再想一步，正确答案是 ${answerLabelsFor(question).join("")}`;
@@ -458,7 +620,7 @@ function flashFeedback(message, ok) {
   els.feedbackBox.className = `feedback-box ${ok ? "ok" : "bad"}`;
   window.setTimeout(() => {
     const question = currentQuestion();
-    if (question) renderFeedback(question, attemptState(question).submitted[question.id], state.mode === "learn", state.mode === "exam");
+    if (question) renderFeedback(question, attemptState(question).submitted[question.id], state.mode === "learn");
   }, 1400);
 }
 
@@ -508,6 +670,9 @@ function resetProgress() {
   if (!window.confirm("确定重置练习进度吗？将清空答题记录、作答草稿和练习位置，保留历史错题、收藏及理论背诵进度。")) return;
   window.clearTimeout(speedTimer);
   Object.assign(state, { currentIndex: 0, selected: {}, submitted: {}, essayDrafts: {}, streak: 0, modeProgress: {}, wrongReview: null });
+  state.exam = { count: state.exam.count, usedIds: [], paper: null, legacyPending: false };
+  els.examNotice.textContent = "";
+  els.examCountInput.setAttribute("aria-invalid", "false");
   restoreModeProgress();
   saveState();
   applyFilters();

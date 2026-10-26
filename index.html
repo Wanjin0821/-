@@ -109,6 +109,14 @@
 
         <div id="quizContentGrid" class="content-grid">
           <section id="questionShell" class="question-shell" aria-live="polite">
+            <div id="examBar" class="exam-toolbar hidden">
+              <div class="exam-toolbar-head"><strong>自由组卷</strong><span id="examPoolText"></span></div>
+              <div class="exam-config"><label for="examCountInput">抽取题量</label><div class="exam-count-field"><input id="examCountInput" type="number" inputmode="numeric" min="1" max="1000" step="1" value="20" aria-describedby="examPoolText examNotice" /><span>题</span></div><button id="newExamButton" class="primary-button" type="button">重新随机组卷</button></div>
+              <p id="examScopeHint" class="exam-scope-hint"></p>
+              <p class="exam-answer-hint">单选、判断：选后出结果 · 多选：选齐后确认 · 论述：对照答案自评</p>
+              <p id="examNotice" class="exam-notice" role="status"></p>
+              <p id="examSummary" class="exam-summary"></p>
+            </div>
             <div id="wrongReviewBar" class="review-toolbar hidden">
               <div>
                 <strong id="wrongReviewTitle">错题重练</strong>
@@ -145,7 +153,7 @@
 
             <footer class="question-actions">
               <button id="prevButton" class="nav-button" type="button" aria-label="上一题">←</button>
-              <span class="keyboard-tip">按数字键选答案 · Enter 确认</span>
+              <span id="keyboardTip" class="keyboard-tip">按数字键选答案 · Enter 确认</span>
               <button id="submitButton" class="primary-button" type="button">确认答案</button>
               <button id="nextButton" class="nav-button" type="button" aria-label="下一题">→</button>
             </footer>

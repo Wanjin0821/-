@@ -85,6 +85,21 @@ h1, h2, p { margin: 0; }
 .review-toolbar strong { font-size: 15px; }
 .review-toolbar p { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .review-toolbar .primary-button { flex-shrink: 0; min-width: 140px; font-size: 13px; }
+.exam-toolbar { margin-bottom: 25px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.exam-toolbar-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.exam-toolbar-head strong { font-size: 15px; }
+.exam-toolbar-head span { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.exam-config { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.exam-config > label { font-size: 13px; color: #606a7c; }
+.exam-count-field { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.exam-count-field input { width: 88px; min-height: 44px; padding: 0 12px; border: 1px solid #dcd4ef; border-radius: 12px; color: var(--ink); background: #fff; font-weight: 750; }
+.exam-count-field input[aria-invalid="true"] { border-color: var(--red); }
+.exam-config .primary-button { margin-left: auto; font-size: 13px; }
+.exam-scope-hint, .exam-answer-hint { margin-top: 12px; font-size: 11px; line-height: 1.8; color: var(--muted); }
+.exam-answer-hint { margin-top: 4px; }
+.exam-notice { margin-top: 8px; color: var(--blue-dark); font-size: 12px; line-height: 1.7; }
+.exam-notice:empty { display: none; }
+.exam-summary { margin-top: 14px; padding: 11px 13px; border-radius: 12px; color: var(--blue-dark); background: var(--blue-soft); font-size: 12px; font-weight: 700; line-height: 1.8; }
 .progress-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; color: var(--muted); font-size: 12px; }
 #typeBadge { color: var(--blue); font-weight: 850; }
 #positionText { color: #8a94a4; font-variant-numeric: tabular-nums; }
@@ -202,6 +217,8 @@ body[data-mode="exam"] { --blue: #7555df; --blue-dark: #5839bf; --blue-soft: #f2
   .review-toolbar { flex-wrap: wrap; gap: 14px; }
   .review-toolbar-actions { width: 100%; }
   .review-toolbar .primary-button { flex: 1; }
+  .exam-config { gap: 10px; }
+  .exam-config .primary-button { flex: 1 1 100%; margin-left: 0; }
   .question-head { margin-top: 28px; }
   #questionTitle { font-size: 20px; line-height: 1.55; }
   .favorite-button { width: 40px; height: 40px; }
@@ -210,6 +227,7 @@ body[data-mode="exam"] { --blue: #7555df; --blue-dark: #5839bf; --blue-soft: #f2
   .option-text { font-size: 14px; }
   .keyboard-tip { display: none; }
   .question-actions { grid-template-columns: 42px 1fr 42px; position: sticky; bottom: 8px; z-index: 10; margin-inline: -6px; padding: 12px 6px 5px; background: rgba(255,255,255,.94); backdrop-filter: blur(12px); }
+  body[data-mode="exam"] .question-actions { position: static; backdrop-filter: none; }
   .primary-button { min-width: 0; }
   .focus-panel { grid-template-columns: 1fr; padding: 10px 3px 0; }
   .metric-list { display: none; }
